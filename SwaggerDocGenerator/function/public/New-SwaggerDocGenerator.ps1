@@ -28,7 +28,7 @@ function New-SwaggerDocGenerator
     Param
     (
         [Parameter(
-            Mandatory = $true,
+            Mandatory = $false,
             ValueFromPipelineByPropertyName = $true,
             Position = 0
         )]

@@ -83,8 +83,8 @@ class SwaggerDocGenerator : System.Object
         )
 
         $externalDocs = [SwaggerExternalDoc]::New(
-            "External Swisscom Wiki",
-            "https://wiki.swisscom.com/display/SMARTICT/Swagger+Parser"
+            "External TestBos Wiki",
+            "https://wiki.testbos.local/display/SMARTICT/Swagger+Parser"
         )
 
         # tags not implemented yet
@@ -94,7 +94,7 @@ class SwaggerDocGenerator : System.Object
         $this.Documentation = [SwaggerDoc]::New(
             $info,
             $this.Url,
-            $this.APIVersion,
+            '',
             $tags, 
             $externalDocs
         )

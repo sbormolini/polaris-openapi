@@ -20,6 +20,199 @@
 .FUNCTIONALITY
    The functionality that best describes this cmdlet
 #>
+
+# helper to parse class from global GetDefinition-Method
+function Invoke-ParseClassProperties
+{
+    [CmdletBinding()]
+    [Alias()]
+    param
+    (
+       [Parameter(
+          Mandatory = $true,
+          ValueFromPipelineByPropertyName = $true,
+          Position = 0
+       )]
+       [ValidateNotNull()]
+       [ValidateNotNullOrEmpty()]
+       [System.String]$ClassName
+    )
+
+    try 
+    {
+        # try to create an instance of ClassName
+        try
+        {
+            $blank = Invoke-Expression -Command ("New-CI$($ClassName)")
+        }
+        catch
+        {
+            try
+            {
+                $blank = Invoke-Expression -Command ("New-$($ClassName)")
+            }
+            catch
+            {
+                $blank = $null
+            }
+        }
+
+        $properties = New-Object -TypeName PSCustomObject
+        if ($null -ne $blank)
+        {
+            # create empty properties object
+            #$properties = New-Object -TypeName PSCustomObject
+
+            foreach ($property in $blank.GetDefinition())
+            {
+                $propertyDefinition = [PSCustomObject]@{}
+                switch ($property.PropertyType) 
+                {
+                    "string"
+                    { 
+                        Add-Member -InputObject $propertyDefinition `
+                                   -MemberType NoteProperty `
+                                   -Name "type" `
+                                   -Value "string"
+                    }
+                    "guid"
+                    { 
+                        # todo
+                        Add-Member -InputObject $propertyDefinition `
+                                   -MemberType NoteProperty `
+                                   -Name "type" `
+                                   -Value "string"
+                    }
+                    "bool" 
+                    {
+                        Add-Member -InputObject $propertyDefinition `
+                                   -MemberType NoteProperty `
+                                   -Name "type" `
+                                   -Value "integer"
+
+                        Add-Member -InputObject $propertyDefinition `
+                                   -MemberType NoteProperty `
+                                   -Name "nullable" `
+                                   -Value "true"
+                    }
+                    "int" 
+                    {
+                        Add-Member -InputObject $propertyDefinition `
+                                   -MemberType NoteProperty `
+                                   -Name "type" `
+                                   -Value "integer"
+
+                        # format
+                        Add-Member -InputObject $propertyDefinition `
+                                   -MemberType NoteProperty `
+                                   -Name "format" `
+                                   -Value "int32"
+                    }
+                    "long"
+                    {
+                        Add-Member -InputObject $propertyDefinition `
+                                   -MemberType NoteProperty `
+                                   -Name "type" `
+                                   -Value "integer"
+
+                        # format
+                        Add-Member -InputObject $propertyDefinition `
+                                   -MemberType NoteProperty `
+                                   -Name "format" `
+                                   -Value "int64"
+                    }
+                    "System.Collections.ArrayList" 
+                    {
+                        # todo / An array of arbitrary types 
+                        # https://swagger.io/docs/specification/data-models/data-types/#object                
+                        Add-Member -InputObject $propertyDefinition `
+                                   -MemberType NoteProperty `
+                                   -Name "type" `
+                                   -Value "array"
+
+                        Add-Member -InputObject $propertyDefinition `
+                                   -MemberType NoteProperty `
+                                   -Name "items" `
+                                   -Value ([PSCustomObject]@{})
+                    }
+                    "datetime"
+                    {
+                        Add-Member -InputObject $propertyDefinition `
+                                   -MemberType NoteProperty `
+                                   -Name "type" `
+                                   -Value "string"
+
+                        Add-Member -InputObject $propertyDefinition `
+                                   -MemberType NoteProperty `
+                                   -Name "format" `
+                                   -Value "date-time"
+                    }
+                    "System.Object"
+                    {
+                        Add-Member -InputObject $propertyDefinition `
+                                   -MemberType NoteProperty `
+                                   -Name "type" `
+                                   -Value "object"
+
+                        Add-Member -InputObject $propertyDefinition `
+                                   -MemberType NoteProperty `
+                                   -Name "properties" `
+                                   -Value ([PSCustomObject]@{})
+                    }
+                    default
+                    {
+                        # try to check if known enum
+                        $enumAsArray = $null
+                        $enumAsArray = Get-EnumValues -EnumName $property.PropertyType -ErrorAction:Ignore
+
+                        if ($null -ne $enumAsArray)
+                        {
+                            Add-Member -InputObject $propertyDefinition `
+                                       -MemberType NoteProperty `
+                                       -Name "type" `
+                                       -Value "string"
+                 
+                            Add-Member -InputObject $propertyDefinition `
+                                       -MemberType NoteProperty `
+                                       -Name "enum" `
+                                       -Value $enumAsArray
+                        }
+                        else
+                        {
+                            # probably an object :)
+                            Add-Member -InputObject $propertyDefinition `
+                                       -MemberType NoteProperty `
+                                       -Name "type" `
+                                       -Value "object"
+      
+                             Add-Member -InputObject $propertyDefinition `
+                                        -MemberType NoteProperty `
+                                        -Name "properties" `
+                                        -Value (Invoke-ParseClassProperties -ClassName $property.PropertyType)
+                        }
+                    }
+                }
+
+                Add-Member -InputObject $properties `
+                           -MemberType NoteProperty `
+                           -Name $property.Name `
+                           -Value $propertyDefinition
+            }
+        }
+        else 
+        {
+            #throw "Could not create an instance of class $($ClassName)"
+            # return empty properties object
+        }
+    }
+    catch 
+    {
+       throw "Unhandled error occured at property '$($property)' from class $($ClassName):`n`t$($_.Exception)"
+    }
+ 
+    return $properties
+} 
+
 function Invoke-ParseRouteHeader
 {
     [CmdletBinding(PositionalBinding=$false,
@@ -49,8 +242,10 @@ function Invoke-ParseRouteHeader
     )
 
     $defaultProperties = @("Input","Output")
+
     # create empty defintion object
     $definition = New-Object -TypeName PSCustomObject
+
     foreach ($item in $defaultProperties) 
     {
         $match = $RouteHeader.Trim().Split("`n") | Select-String -Pattern $item -SimpleMatch
@@ -158,11 +353,11 @@ function Invoke-ParseRouteHeader
                 {
                     Add-Member -InputObject $value `
                                -MemberType NoteProperty `
-                               -Name "Type" `
+                               -Name "type" `
                                -Value $className.ToLower()
                 }
-                else {
-                    $blank = New-Object -TypeName $className
+                else 
+                {
                     Add-Member -InputObject $value `
                                -MemberType NoteProperty `
                                -Name "Type" `
@@ -171,15 +366,14 @@ function Invoke-ParseRouteHeader
                     Add-Member -InputObject $value `
                                -MemberType NoteProperty `
                                -Name "TypeDefinition" `
-                               -Value $blank.GetDefinition()
-                    
+                               -Value (Invoke-ParseClassProperties -ClassName $className)
                 }
             }
 
             Add-Member -InputObject $definition `
-                    -MemberType NoteProperty `
-                    -Name $item `
-                    -Value $value
+                       -MemberType NoteProperty `
+                       -Name $item `
+                       -Value $value
         }
     }
 

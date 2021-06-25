@@ -369,7 +369,7 @@ class SwaggerObjectDefinition : SwaggerObject
     [string] ConvertToJson()
     {
         # exlude helper (hidden) property
-        return Select-Object -InputObject $this -Property $this.PSObject.Properties.Name | ConvertTo-Json -Depth 2
+        return Select-Object -InputObject $this -Property $this.PSObject.Properties.Name | ConvertTo-Json -Depth 4
     } 
 }
 
@@ -463,18 +463,17 @@ class SwaggerDoc : SwaggerObject
 
     [string] ConvertToJson()
     {
-        # replace "paths"in object with converted string of paths
+        <##>
+        # replace "paths" / "definitions" in object with converted string of paths
         # replace definition with helper Name property!
         $ReplaceNestedObject = {
             param($Document, $Collection, $ReplaceString)
 
             $sb = [System.Text.StringBuilder]::New()
-            [void]$sb.Append("{`n")
-            foreach ($item in $Collection)
+            [void]$sb.Append("{")
+            foreach ($item in $Collection.PSObject.Properties.Name)
             {
-                [void]$sb.Append(
-                    ('"' + $item.PSObject.Properties.Name + '": ' + $item.($item.PSObject.Properties.Name).ConvertToJson() + ',')
-                )
+                [void]$sb.Append( ("`n" + '"' + $item + '": ' + $Collection.$item.ConvertToJson() + ',') )
             }
             [void]$sb.Remove($sb.Length-1, 1)
             [void]$sb.Append("`n}")
@@ -482,11 +481,11 @@ class SwaggerDoc : SwaggerObject
             return $Document.Replace($ReplaceString, $sb.ToString())
         }
         
-        # copy instance
+        # copy instance and set placeholders
         $doc = $this.Copy()
         $doc.paths = "[ReplaceStringPaths]"
-        $doc.definitions = "[ReplaceStringDefinitions]"
-        $docAsString = $doc | ConvertTo-Json -Depth 2
+        #$doc.definitions = "[ReplaceStringDefinitions]"
+        $docAsString = $doc | ConvertTo-Json -Depth 7 -WarningAction:Ignore
 
         # replace paths
         $docAsString = $ReplaceNestedObject.Invoke(
@@ -494,12 +493,14 @@ class SwaggerDoc : SwaggerObject
             $this.paths, 
             '"[ReplaceStringPaths]"'
         )
-        # replace definiton
+
+        <# replace definiton
         $docAsString = $ReplaceNestedObject.Invoke(
             $docAsString, 
             $this.definitions, 
             '"[ReplaceStringDefinitions]"'
         )
+        #>
 
         return $docAsString
     }
